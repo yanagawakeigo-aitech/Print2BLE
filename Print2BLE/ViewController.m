@@ -68,7 +68,17 @@ static int iWidth, iHeight; // size of the image that's ready to print
     BLEClass = [[MyBLE alloc] init];
 
     _myview.myVC = self; // give DragDropView access to our methods
-    [[self view] addSubview:_myview];
+    // Send the full-window drag/drop overlay to the BACK of the z-order
+    // instead of appending it (which would put it in FRONT of the
+    // storyboard's own Connect/Print/Feed buttons -- they're already in
+    // the view hierarchy by this point, loaded before viewDidLayout ever
+    // runs). A plain addSubview: here silently ate real mouse clicks on
+    // those buttons even though AX-driven presses (which bypass normal
+    // hit-testing) still worked, which is why this wasn't caught earlier.
+    // positioned:NSWindowBelow keeps every button -- existing and any
+    // added later -- clickable while the overlay still catches drags
+    // anywhere no other control sits.
+    [[self view] addSubview:_myview positioned:NSWindowBelow relativeTo:nil];
 
     // Add the text-entry panel AFTER the full-window drag/drop overlay so
     // its controls sit in front of it and remain clickable/typeable.
