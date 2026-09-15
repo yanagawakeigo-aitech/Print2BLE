@@ -39,6 +39,7 @@ const unsigned char ucMirror[256]=
     self.centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
 //    return [self initWithQueue:nil];
     self.discoveredPeripherals = [NSMutableArray array];
+    self.foundPeripherals = [NSMutableArray array];
     self = [super init];
     return self;
 }
@@ -98,12 +99,23 @@ const unsigned char ucMirror[256]=
 //        [self connectToPeripheral: aPeripheral];
 //    }
     if (deviceName) NSLog(@"Found device: %s", deviceName);
+    if (deviceName && ![self.foundPeripherals containsObject:aPeripheral]) {
+        // Track every named device (regardless of whether it matches a
+        // supported model) so the UI can offer it in a manual picker --
+        // the auto-match list below missed the PT210 entirely until its
+        // name was added, and any future unrecognized printer would hit
+        // the same wall without a manual fallback.
+        [self.foundPeripherals addObject:aPeripheral];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"BLEDeviceListChangedNotification"
+                                                            object:self userInfo:nil];
+    }
     if( deviceName && ![self.discoveredPeripherals containsObject:aPeripheral])
     {
         // check if it's one of the supported names
-        _ucPrinterType = [self findPrinter:deviceName];
-        if (_ucPrinterType < PRINTER_COUNT) {
+        uint8_t type = [self findPrinter:deviceName];
+        if (type < PRINTER_COUNT) {
             NSLog(@"Found a supported printer: %s, connecting...", deviceName);
+            _ucPrinterType = type;
             [peripherals addObject:aPeripheral];
             [self.discoveredPeripherals addObject:aPeripheral];
             [self connectToPeripheral: aPeripheral];
@@ -114,11 +126,12 @@ const unsigned char ucMirror[256]=
             // Seen a BLE device, but its name doesn't match any supported
             // printer model -- surface it instead of silently ignoring it,
             // so the user can tell "found nothing" apart from "found
-            // something but it's not a model this app recognizes."
+            // something but it's not a model this app recognizes." It's
+            // also now available for manual selection in the device list.
             NSLog(@"Found device but it's not a supported printer model: %s", deviceName);
             [[NSNotificationCenter defaultCenter] postNotificationName:@"BLEStateMessageNotification"
                                                                 object:self
-                                                              userInfo:@{@"message": [NSString stringWithFormat:@"未対応の機器: %s（対応機種ではありません）", deviceName]}];
+                                                              userInfo:@{@"message": [NSString stringWithFormat:@"未対応の機器: %s（デバイス一覧から手動接続できます）", deviceName]}];
         }
     }
 }
@@ -164,8 +177,13 @@ const unsigned char ucMirror[256]=
 didDisconnectPeripheral: (CBPeripheral *)aPeripheral
                   error: (NSError *)error
 {
-    printf("didDisconnectPeripheral\n");
+    NSLog(@"didDisconnectPeripheral");
     _bConnected = NO;
+    // Also clear here (not just at the top of startScan) so a disconnect
+    // that happens on its own -- printer went out of range, powered off,
+    // idle-timed-out -- doesn't leave this device stuck in the "already
+    // seen, skip it" filter until the next manual Connect press.
+    [self.discoveredPeripherals removeAllObjects];
     [[NSNotificationCenter defaultCenter] postNotificationName:@"StatusChangedNotification"
                                                         object:self userInfo:nil];
 
@@ -182,6 +200,18 @@ didDisconnectPeripheral: (CBPeripheral *)aPeripheral
 {
     NSLog(@"Start scanning");
 
+    // Forget devices seen on any previous scan. discoveredPeripherals is a
+    // dedup filter for the auto-connect-on-known-name path below; if it
+    // isn't cleared, a printer that was connected once and later
+    // disconnected (powered off, went out of range, idle timeout...) is
+    // silently skipped forever afterward because didDiscoverPeripheral:
+    // still finds it "already seen" -- pressing Connect again looks like it
+    // does nothing. Every fresh Connect press now starts from a clean slate.
+    [self.discoveredPeripherals removeAllObjects];
+    [self.foundPeripherals removeAllObjects];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"BLEDeviceListChangedNotification"
+                                                        object:self userInfo:nil];
+
     // CoreBluetooth refuses (silently) to scan until the central manager has
     // finished powering on. Right after launch this callback often hasn't
     // fired yet, so a scan requested here would otherwise be dropped with no
@@ -194,6 +224,34 @@ didDisconnectPeripheral: (CBPeripheral *)aPeripheral
         [self reportCurrentStateIfNotReady];
     }
 } /* startScan */
+
+// Manually connect to a device the user picked from the discovered-device
+// list, bypassing the supported-name filter. Useful when a printer's
+// advertised name isn't (yet) in findPrinter()'s table -- as happened with
+// the PT210 -- or to pick a specific unit when several are in range.
+- (void)connectToDiscoveredPeripheralAtIndex:(NSInteger)index
+{
+    if (index < 0 || index >= (NSInteger)self.foundPeripherals.count) return;
+    CBPeripheral *peripheral = self.foundPeripherals[index];
+    const char *deviceName = [[peripheral name] cStringUsingEncoding:NSUTF8StringEncoding];
+    uint8_t type = deviceName ? [self findPrinter:deviceName] : 255;
+    if (type >= PRINTER_COUNT) {
+        NSLog(@"Manually selected device '%s' doesn't match a known model; assuming MTP-2 protocol", deviceName ?: "?");
+        type = PRINTER_MTP2; // most common protocol among supported models; may not print correctly if wrong
+    }
+    _ucPrinterType = type;
+    [self connectToPeripheral:peripheral];
+} /* connectToDiscoveredPeripheralAtIndex: */
+
+- (void)disconnectPrinter
+{
+    if (_myPeripheral) {
+        [self.centralManager cancelPeripheralConnection:_myPeripheral];
+    }
+    _bConnected = NO;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"StatusChangedNotification"
+                                                        object:self userInfo:nil];
+} /* disconnectPrinter */
 
 // Post a human-readable explanation when Bluetooth isn't in a scannable
 // state, so the UI can tell the user why nothing happened instead of the

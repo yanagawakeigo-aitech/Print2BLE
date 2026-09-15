@@ -73,6 +73,7 @@ static int iWidth, iHeight; // size of the image that's ready to print
     // Add the text-entry panel AFTER the full-window drag/drop overlay so
     // its controls sit in front of it and remain clickable/typeable.
     [self setupTextEntryPanel];
+    [self setupDevicePicker];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(ditherFile:)
@@ -85,6 +86,10 @@ static int iWidth, iHeight; // size of the image that's ready to print
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(bleStateMessage:)
                                                  name:@"BLEStateMessageNotification"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(refreshDeviceList:)
+                                                 name:@"BLEDeviceListChangedNotification"
                                                object:nil];
 
 //    [BLEClass startScan]; // scan and connect to any printers in the area
@@ -534,5 +539,75 @@ static int iWidth, iHeight; // size of the image that's ready to print
     [alert addButtonWithTitle:@"OK"];
     [alert runModal];
 } /* showAlertWithTitle:message: */
+
+#pragma mark - Bluetooth device picker
+
+//
+// A dropdown of every BLE device seen during the current scan (not just
+// ones that auto-matched a known printer name), plus a Disconnect button.
+// This is the manual fallback for when auto-connect doesn't find/recognize
+// a printer -- e.g. the PT210 needed its name added to findPrinter() before
+// auto-connect could work at all, and any other unrecognized model would
+// hit the same wall without a manual way around it.
+//
+- (void)setupDevicePicker
+{
+    if (_devicePopup != nil) return; // already set up
+    NSView *parent = [self view];
+
+    NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(32, 392, 350, 26) pullsDown:NO];
+    [popup addItemWithTitle:@"検出したデバイス(スキャン待ち)"];
+    popup.target = self;
+    popup.action = @selector(DevicePopupChanged:);
+    popup.autoresizingMask = NSViewMaxYMargin;
+    [parent addSubview:popup];
+    _devicePopup = popup;
+
+    NSButton *disconnect = [NSButton buttonWithTitle:@"切断" target:self action:@selector(DisconnectPushed:)];
+    disconnect.frame = NSMakeRect(390, 392, 70, 26);
+    disconnect.autoresizingMask = NSViewMaxYMargin;
+    [parent addSubview:disconnect];
+    _disconnectButton = disconnect;
+} /* setupDevicePicker */
+
+// Rebuild the popup's contents whenever MyBLE finds a new device or clears
+// its list (start of a fresh scan).
+- (void)refreshDeviceList:(NSNotification *)notification
+{
+    NSArray<CBPeripheral *> *devices = [BLEClass foundPeripherals];
+    NSString *previousTitle = _devicePopup.titleOfSelectedItem;
+    [_devicePopup removeAllItems];
+    if (devices.count == 0) {
+        [_devicePopup addItemWithTitle:@"検出したデバイス(スキャン待ち)"];
+        return;
+    }
+    for (CBPeripheral *peripheral in devices) {
+        NSString *name = [peripheral name] ?: @"(名前なし)";
+        [_devicePopup addItemWithTitle:name];
+    }
+    // Keep the previous selection if it's still in the list (e.g. after a
+    // reconnect attempt), otherwise default to the newest device found.
+    if (previousTitle && [_devicePopup itemWithTitle:previousTitle]) {
+        [_devicePopup selectItemWithTitle:previousTitle];
+    } else {
+        [_devicePopup selectItemAtIndex:_devicePopup.numberOfItems - 1];
+    }
+} /* refreshDeviceList */
+
+- (IBAction)DevicePopupChanged:(id)sender
+{
+    NSInteger index = _devicePopup.indexOfSelectedItem;
+    NSArray<CBPeripheral *> *devices = [BLEClass foundPeripherals];
+    if (index < 0 || index >= (NSInteger)devices.count) return; // "スキャン待ち" placeholder or stale index
+    NSLog(@"Manually connecting to device at index %ld", (long)index);
+    _StatusLabel.stringValue = @"接続中...";
+    [BLEClass connectToDiscoveredPeripheralAtIndex:index];
+} /* DevicePopupChanged */
+
+- (IBAction)DisconnectPushed:(id)sender
+{
+    NSLog(@"Disconnect!");
+    [BLEClass disconnectPrinter];
+} /* DisconnectPushed */
 
 @end

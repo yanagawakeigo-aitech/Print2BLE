@@ -21,6 +21,8 @@
 @property (nonatomic, strong) NSTextField *fontSizeLabel;
 @property (nonatomic) CGFloat textFontSize;
 @property (nonatomic) BOOL didFinishLayoutSetup;
+@property (nonatomic, strong) NSPopUpButton *devicePopup;
+@property (nonatomic, strong) NSButton *disconnectButton;
 
 // Process a new file
 - (void)processFile:(NSString *)path;
@@ -38,5 +40,9 @@
 - (IBAction)DecreaseFontSizePushed:(id)sender;
 - (IBAction)IncreaseFontSizePushed:(id)sender;
 - (void)showAlertWithTitle:(NSString *)title message:(NSString *)message;
+- (void)setupDevicePicker;
+- (void)refreshDeviceList:(NSNotification *)notification;
+- (IBAction)DevicePopupChanged:(id)sender;
+- (IBAction)DisconnectPushed:(id)sender;
 @end
 

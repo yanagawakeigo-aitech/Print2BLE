@@ -29,8 +29,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (bool)isConnected;
 - (void)scanLine: (uint8_t *)pData withLength:(int)len;
 - (uint8_t)CheckSum:(uint8_t *)pData withLength: (int) iLen;
+// Manual device selection (in addition to the auto-connect-on-known-name
+// behavior in didDiscoverPeripheral:), and a clean disconnect so the user
+// can retry without restarting the app.
+- (void)connectToDiscoveredPeripheralAtIndex:(NSInteger)index;
+- (void)disconnectPrinter;
 
 @property (retain) NSMutableArray *discoveredPeripherals;
+@property (retain) NSMutableArray<CBPeripheral *> *foundPeripherals; // every named device seen this scan, for manual selection
 @property (strong, nonatomic) CBCentralManager * manager;
 @property (atomic) int count;
 @property (nonatomic) dispatch_queue_t bleQueue;
