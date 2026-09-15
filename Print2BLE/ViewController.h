@@ -22,5 +22,7 @@
 - (void)ditherFile:(NSNotification *) notification;
 - (uint8_t *)DitherImage:(uint8_t*)pPixels width:(int)iWidth height:(int)iHeight;
 - (void) printImage;
+- (void)processBitmap:(NSBitmapImageRep *)bitmap;
+- (void)paste:(id)sender;
 @end
 

@@ -165,6 +165,81 @@ static int iWidth, iHeight; // size of the image that's ready to print
         // decode the image into a bitmap
         NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithData:theFileData];
         if (bitmap) {
+            [self processBitmap:bitmap];
+        }
+    }
+} /* ditherFile*/
+
+//
+// Render clipboard text into a bitmap and feed it through the same
+// dither + preview pipeline used for dropped image files.
+// Wired to Cmd+V / Edit > Paste via the standard NSResponder paste: action.
+//
+- (void)paste:(id)sender
+{
+    NSPasteboard *pboard = [NSPasteboard generalPasteboard];
+    NSString *text = [pboard stringForType:NSPasteboardTypeString];
+    if (text == nil || text.length == 0) {
+        NSLog(@"Paste: no text found on the clipboard");
+        return;
+    }
+    NSBitmapImageRep *bitmap = [self bitmapFromText:text];
+    if (bitmap) {
+        [self processBitmap:bitmap];
+    }
+} /* paste */
+
+//
+// Rasterize a string of text (white background, black text) into a bitmap
+// sized to the connected printer's width so it can be dithered like any
+// other image.
+//
+- (NSBitmapImageRep *)bitmapFromText:(NSString *)text
+{
+    int printerWidth = [BLEClass getWidth];
+    if (printerWidth <= 0) printerWidth = 384; // default width if not yet connected
+
+    const CGFloat margin = 8.0;
+    const CGFloat fontSize = 24.0;
+    NSFont *font = [NSFont fontWithName:@"Menlo" size:fontSize];
+    if (font == nil) font = [NSFont systemFontOfSize:fontSize];
+
+    NSMutableParagraphStyle *paraStyle = [[NSMutableParagraphStyle alloc] init];
+    paraStyle.lineBreakMode = NSLineBreakByWordWrapping;
+    NSDictionary *attrs = @{ NSFontAttributeName: font,
+                             NSForegroundColorAttributeName: [NSColor blackColor],
+                             NSParagraphStyleAttributeName: paraStyle };
+
+    CGFloat textWidth = printerWidth - (margin * 2);
+    NSStringDrawingOptions drawOptions = NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading;
+    NSRect boundingRect = [text boundingRectWithSize:NSMakeSize(textWidth, CGFLOAT_MAX)
+                                              options:drawOptions
+                                           attributes:attrs];
+    int textHeight = (int)ceil(boundingRect.size.height + (margin * 2));
+    if (textHeight < 1) textHeight = 1;
+
+    NSSize imageSize = NSMakeSize(printerWidth, textHeight);
+    NSImage *image = [[NSImage alloc] initWithSize:imageSize];
+    [image lockFocus];
+    [[NSColor whiteColor] setFill];
+    NSRectFill(NSMakeRect(0, 0, imageSize.width, imageSize.height));
+    NSRect drawRect = NSMakeRect(margin, margin, textWidth, boundingRect.size.height);
+    [text drawWithRect:drawRect options:drawOptions attributes:attrs];
+    [image unlockFocus];
+
+    NSBitmapImageRep *rep = [NSBitmapImageRep imageRepWithData:[image TIFFRepresentation]];
+    return rep;
+} /* bitmapFromText */
+
+//
+// Shared pipeline: resize to printer width, convert to grayscale, dither
+// to 1-bpp, store it ready to print and update the preview image.
+// Used for both dropped image files and rasterized clipboard text.
+//
+- (void)processBitmap:(NSBitmapImageRep *)bitmap
+{
+    if (bitmap) {
+        {
             // convert to grayscale
             NSColorSpace *targetColorSpace = [NSColorSpace genericGrayColorSpace];
             NSBitmapImageRep *grayBitmap = [bitmap bitmapImageRepByConvertingToColorSpace: targetColorSpace renderingIntent: NSColorRenderingIntentDefault];
@@ -175,6 +250,7 @@ static int iWidth, iHeight; // size of the image that's ready to print
             iOriginalWidth = bitmap.size.width;
             iOriginalHeight = bitmap.size.height;
             iWidth = [BLEClass getWidth]; // get printer width in pixels
+            if (iWidth <= 0) iWidth = 384; // default width if not yet connected to a printer
             ratio = (float)iOriginalWidth / (float)iWidth;
             iHeight = (int)((float)iOriginalHeight / ratio);
             NSSize newSize;
@@ -238,5 +314,5 @@ static int iWidth, iHeight; // size of the image that's ready to print
             free(pGray);
         }
     }
-} /* ditherFile*/
+} /* processBitmap */
 @end
