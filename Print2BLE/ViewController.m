@@ -19,6 +19,7 @@ static int iWidth, iHeight; // size of the image that's ready to print
 - (void)viewDidLoad {
     [super viewDidLoad];
     _myview = [DragDropView alloc];
+    _textFontSize = 24.0;
     [self setupScrollablePreview];
 }
 
@@ -62,6 +63,10 @@ static int iWidth, iHeight; // size of the image that's ready to print
     
     _myview.myVC = self; // give DragDropView access to our methods
     [[self view] addSubview:_myview];
+
+    // Add the text-entry panel AFTER the full-window drag/drop overlay so
+    // its controls sit in front of it and remain clickable/typeable.
+    [self setupTextEntryPanel];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(ditherFile:)
@@ -230,7 +235,7 @@ static int iWidth, iHeight; // size of the image that's ready to print
     if (printerWidth <= 0) printerWidth = 384; // default width if not yet connected
 
     const CGFloat margin = 8.0;
-    const CGFloat fontSize = 24.0;
+    CGFloat fontSize = _textFontSize > 0 ? _textFontSize : 24.0;
     NSFont *font = [NSFont fontWithName:@"Menlo" size:fontSize];
     if (font == nil) font = [NSFont systemFontOfSize:fontSize];
 
@@ -354,4 +359,137 @@ static int iWidth, iHeight; // size of the image that's ready to print
         }
     }
 } /* processBitmap */
+
+#pragma mark - Text entry panel
+
+//
+// Build a small panel at the bottom of the window: a multi-line text box,
+// a Paste button (pulls the clipboard into the text box), a button to
+// render+print the typed text, and +/- controls to adjust the font size
+// used when rasterizing that text.
+//
+- (void)setupTextEntryPanel
+{
+    if (_textInputView != nil) return; // already set up
+
+    NSView *parent = [self view];
+    CGFloat winWidth = parent.frame.size.width; // 640 in the storyboard
+
+    // Section label
+    NSTextField *label = [NSTextField labelWithString:@"テキスト入力(貼り付け、または直接入力して印刷)"];
+    label.frame = NSMakeRect(16, 122, winWidth - 32, 16);
+    label.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
+    label.font = [NSFont systemFontOfSize:11];
+    label.textColor = [NSColor secondaryLabelColor];
+    [parent addSubview:label];
+
+    // Multi-line text input, wrapped in its own scroll view
+    NSRect textFrame = NSMakeRect(16, 16, 360, 96);
+    NSScrollView *textScroll = [[NSScrollView alloc] initWithFrame:textFrame];
+    textScroll.autoresizingMask = NSViewWidthSizable | NSViewMaxYMargin;
+    textScroll.hasVerticalScroller = YES;
+    textScroll.borderType = NSBezelBorder;
+
+    NSTextView *textView = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, textFrame.size.width, textFrame.size.height)];
+    textView.minSize = NSMakeSize(0, textFrame.size.height);
+    textView.maxSize = NSMakeSize(FLT_MAX, FLT_MAX);
+    textView.verticallyResizable = YES;
+    textView.horizontallyResizable = NO;
+    textView.autoresizingMask = NSViewWidthSizable;
+    textView.textContainer.widthTracksTextView = YES;
+    textView.font = [NSFont systemFontOfSize:13];
+    textView.richText = NO;
+    textScroll.documentView = textView;
+    [parent addSubview:textScroll];
+    _textInputView = textView;
+
+    // Paste + Print buttons
+    NSButton *pasteButton = [NSButton buttonWithTitle:@"貼り付け" target:self action:@selector(PastePushed:)];
+    pasteButton.frame = NSMakeRect(386, 66, 90, 28);
+    pasteButton.autoresizingMask = NSViewMinXMargin | NSViewMaxYMargin;
+    [parent addSubview:pasteButton];
+
+    NSButton *printTextButton = [NSButton buttonWithTitle:@"このテキストを印刷" target:self action:@selector(PrintTextPushed:)];
+    printTextButton.frame = NSMakeRect(386, 32, 120, 28);
+    printTextButton.autoresizingMask = NSViewMinXMargin | NSViewMaxYMargin;
+    [parent addSubview:printTextButton];
+
+    // Font size controls
+    CGFloat fx = winWidth - 130; // right-aligned block
+    NSTextField *fontLabel = [NSTextField labelWithString:@"文字サイズ"];
+    fontLabel.frame = NSMakeRect(fx, 96, 120, 14);
+    fontLabel.autoresizingMask = NSViewMinXMargin | NSViewMaxYMargin;
+    fontLabel.font = [NSFont systemFontOfSize:11];
+    fontLabel.textColor = [NSColor secondaryLabelColor];
+    [parent addSubview:fontLabel];
+
+    NSButton *minusButton = [NSButton buttonWithTitle:@"－" target:self action:@selector(DecreaseFontSizePushed:)];
+    minusButton.frame = NSMakeRect(fx, 66, 30, 28);
+    minusButton.autoresizingMask = NSViewMinXMargin | NSViewMaxYMargin;
+    [parent addSubview:minusButton];
+
+    NSTextField *sizeLabel = [NSTextField labelWithString:[NSString stringWithFormat:@"%dpt", (int)_textFontSize]];
+    sizeLabel.frame = NSMakeRect(fx + 34, 66, 56, 28);
+    sizeLabel.alignment = NSTextAlignmentCenter;
+    sizeLabel.autoresizingMask = NSViewMinXMargin | NSViewMaxYMargin;
+    [parent addSubview:sizeLabel];
+    _fontSizeLabel = sizeLabel;
+
+    NSButton *plusButton = [NSButton buttonWithTitle:@"＋" target:self action:@selector(IncreaseFontSizePushed:)];
+    plusButton.frame = NSMakeRect(fx + 94, 66, 30, 28);
+    plusButton.autoresizingMask = NSViewMinXMargin | NSViewMaxYMargin;
+    [parent addSubview:plusButton];
+
+    NSButton *previewButton = [NSButton buttonWithTitle:@"プレビュー更新" target:self action:@selector(PreviewTextPushed:)];
+    previewButton.frame = NSMakeRect(fx, 32, 124, 28);
+    previewButton.autoresizingMask = NSViewMinXMargin | NSViewMaxYMargin;
+    [parent addSubview:previewButton];
+} /* setupTextEntryPanel */
+
+// Pull the current clipboard text into the text box (replacing its content).
+- (IBAction)PastePushed:(id)sender
+{
+    NSPasteboard *pboard = [NSPasteboard generalPasteboard];
+    NSString *text = [pboard stringForType:NSPasteboardTypeString];
+    if (text == nil) return;
+    _textInputView.string = text;
+} /* PastePushed */
+
+// Render the typed text into the preview only (no printing).
+- (IBAction)PreviewTextPushed:(id)sender
+{
+    NSString *text = _textInputView.string;
+    if (text == nil || text.length == 0) return;
+    NSBitmapImageRep *bitmap = [self bitmapFromText:text];
+    if (bitmap) {
+        [self processBitmap:bitmap];
+    }
+} /* PreviewTextPushed */
+
+// Render the typed text and immediately send it to the connected printer.
+- (IBAction)PrintTextPushed:(id)sender
+{
+    [self PreviewTextPushed:sender];
+    [self printImage];
+} /* PrintTextPushed */
+
+- (void)updateFontSizeLabel
+{
+    _fontSizeLabel.stringValue = [NSString stringWithFormat:@"%dpt", (int)_textFontSize];
+} /* updateFontSizeLabel */
+
+- (IBAction)DecreaseFontSizePushed:(id)sender
+{
+    _textFontSize = MAX(8.0, _textFontSize - 2.0);
+    [self updateFontSizeLabel];
+    if (_textInputView.string.length > 0) [self PreviewTextPushed:sender];
+} /* DecreaseFontSizePushed */
+
+- (IBAction)IncreaseFontSizePushed:(id)sender
+{
+    _textFontSize = MIN(72.0, _textFontSize + 2.0);
+    [self updateFontSizeLabel];
+    if (_textInputView.string.length > 0) [self PreviewTextPushed:sender];
+} /* IncreaseFontSizePushed */
+
 @end

@@ -17,6 +17,9 @@
 @property (weak) IBOutlet NSImageView *myImage;
 @property (weak) IBOutlet NSTextField *StatusLabel;
 @property (nonatomic, strong) NSScrollView *previewScrollView;
+@property (nonatomic, strong) NSTextView *textInputView;
+@property (nonatomic, strong) NSTextField *fontSizeLabel;
+@property (nonatomic) CGFloat textFontSize;
 
 // Process a new file
 - (void)processFile:(NSString *)path;
@@ -26,5 +29,12 @@
 - (void)processBitmap:(NSBitmapImageRep *)bitmap;
 - (void)paste:(id)sender;
 - (void)setupScrollablePreview;
+- (void)setupTextEntryPanel;
+- (NSBitmapImageRep *)bitmapFromText:(NSString *)text;
+- (IBAction)PastePushed:(id)sender;
+- (IBAction)PrintTextPushed:(id)sender;
+- (IBAction)PreviewTextPushed:(id)sender;
+- (IBAction)DecreaseFontSizePushed:(id)sender;
+- (IBAction)IncreaseFontSizePushed:(id)sender;
 @end
 
