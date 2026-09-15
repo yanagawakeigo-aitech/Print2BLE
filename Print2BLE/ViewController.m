@@ -267,7 +267,7 @@ static int iWidth, iHeight; // size of the image that's ready to print
     int printerWidth = [BLEClass getWidth];
     if (printerWidth <= 0) printerWidth = 384; // default width if not yet connected
 
-    const CGFloat margin = 8.0;
+    const CGFloat margin = 2.0; // keep just enough to avoid clipping glyph edges
     CGFloat fontSize = _textFontSize > 0 ? _textFontSize : 24.0;
     NSFont *font = [NSFont fontWithName:@"Menlo" size:fontSize];
     if (font == nil) font = [NSFont systemFontOfSize:fontSize];
