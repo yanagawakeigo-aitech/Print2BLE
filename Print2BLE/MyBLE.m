@@ -88,22 +88,36 @@ const unsigned char ucMirror[256]=
                   RSSI:(NSNumber *)RSSI
 {
     NSMutableArray *peripherals =  [self mutableArrayValueForKey:@"discoveredPeripherals"];
-    const char* deviceName = [[aPeripheral name] cStringUsingEncoding:NSASCIIStringEncoding];
+    // UTF8 (not ASCII) so a printer whose advertised name has non-ASCII
+    // characters isn't silently dropped before it can even be logged.
+    const char* deviceName = [[aPeripheral name] cStringUsingEncoding:NSUTF8StringEncoding];
     
 //    if ([[aPeripheral name] isEqualToString: @"BaronVonTigglestest"])
 //    {
 //        [self connectToPeripheral: aPeripheral];
 //    }
-    if (deviceName) printf("Found device: %s\n", deviceName);
+    if (deviceName) NSLog(@"Found device: %s", deviceName);
     if( deviceName && ![self.discoveredPeripherals containsObject:aPeripheral])
     {
         // check if it's one of the supported names
         _ucPrinterType = [self findPrinter:deviceName];
         if (_ucPrinterType < PRINTER_COUNT) {
-            printf("Found a supported printer: %s, connecting...\n", deviceName);
+            NSLog(@"Found a supported printer: %s, connecting...", deviceName);
             [peripherals addObject:aPeripheral];
             [self.discoveredPeripherals addObject:aPeripheral];
             [self connectToPeripheral: aPeripheral];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"BLEStateMessageNotification"
+                                                                object:self
+                                                              userInfo:@{@"message": [NSString stringWithFormat:@"接続中: %s", deviceName]}];
+        } else {
+            // Seen a BLE device, but its name doesn't match any supported
+            // printer model -- surface it instead of silently ignoring it,
+            // so the user can tell "found nothing" apart from "found
+            // something but it's not a model this app recognizes."
+            NSLog(@"Found device but it's not a supported printer model: %s", deviceName);
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"BLEStateMessageNotification"
+                                                                object:self
+                                                              userInfo:@{@"message": [NSString stringWithFormat:@"未対応の機器: %s（対応機種ではありません）", deviceName]}];
         }
     }
 }
