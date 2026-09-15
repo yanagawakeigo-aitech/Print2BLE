@@ -18,6 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)init;
 - (void)startScan;
+- (void)reportCurrentStateIfNotReady;
 - (uint8_t)findPrinter: (const char *) name;
 - (void)writeData: (uint8_t *)pData withLength:(int)len withResponse:(bool)response;
 - (void)preGraphics: (int)height;
@@ -38,6 +39,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) bool bConnected;
 @property (nonatomic) uint8_t ucPrinterType;
 @property (copy) NSString *manufacturer;
+@property (nonatomic) bool scanRequested; // startScan was called before Bluetooth finished powering on
 
 enum {
   PRINTER_MTP2=0,

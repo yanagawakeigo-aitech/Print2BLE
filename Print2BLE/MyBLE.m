@@ -135,6 +135,13 @@ const unsigned char ucMirror[256]=
 //------------------------------------------------------------------------------
 - (void)centralManagerDidUpdateState:(CBCentralManager *)manager
 {
+    NSLog(@"centralManagerDidUpdateState: %ld", (long)manager.state);
+    if (manager.state == CBManagerStatePoweredOn && _scanRequested) {
+        _scanRequested = NO;
+        [self.centralManager scanForPeripheralsWithServices: nil options: nil];
+    } else {
+        [self reportCurrentStateIfNotReady];
+    }
 }
 //------------------------------------------------------------------------------
 // Invoked whenever an existing connection with the peripheral is torn down.
@@ -159,9 +166,47 @@ didDisconnectPeripheral: (CBPeripheral *)aPeripheral
 - (void) startScan
 {
     NSLog(@"Start scanning");
-    
-    [self.centralManager scanForPeripheralsWithServices: nil options: nil];
+
+    // CoreBluetooth refuses (silently) to scan until the central manager has
+    // finished powering on. Right after launch this callback often hasn't
+    // fired yet, so a scan requested here would otherwise be dropped with no
+    // feedback at all. Defer it to centralManagerDidUpdateState: instead.
+    if (self.centralManager.state == CBManagerStatePoweredOn) {
+        [self.centralManager scanForPeripheralsWithServices: nil options: nil];
+    } else {
+        NSLog(@"Bluetooth is not ready yet (state=%ld); will scan once powered on", (long)self.centralManager.state);
+        _scanRequested = YES;
+        [self reportCurrentStateIfNotReady];
+    }
 } /* startScan */
+
+// Post a human-readable explanation when Bluetooth isn't in a scannable
+// state, so the UI can tell the user why nothing happened instead of the
+// Connect button silently doing nothing.
+- (void)reportCurrentStateIfNotReady
+{
+    NSString *msg = nil;
+    switch (self.centralManager.state) {
+        case CBManagerStatePoweredOff:
+            msg = @"Bluetoothがオフになっています。Macの設定でBluetoothをオンにしてください。";
+            break;
+        case CBManagerStateUnauthorized:
+            msg = @"Bluetoothの使用が許可されていません。システム設定 > プライバシーとセキュリティ > Bluetooth でPrint2BLEを許可してください。";
+            break;
+        case CBManagerStateUnsupported:
+            msg = @"このMacはBluetooth LEに対応していません。";
+            break;
+        case CBManagerStateResetting:
+        case CBManagerStateUnknown:
+        default:
+            break; // transient states; centralManagerDidUpdateState: will fire again shortly
+    }
+    if (msg) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"BLEStateMessageNotification"
+                                                            object:self
+                                                          userInfo:@{@"message": msg}];
+    }
+} /* reportCurrentStateIfNotReady */
 
 - (void) connectToPeripheral: (CBPeripheral *)aPeripheral
 {

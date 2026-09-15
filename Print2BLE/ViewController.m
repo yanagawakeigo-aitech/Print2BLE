@@ -82,6 +82,10 @@ static int iWidth, iHeight; // size of the image that's ready to print
                                              selector:@selector(statusChanged:)
                                                  name:@"StatusChangedNotification"
                                                object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(bleStateMessage:)
+                                                 name:@"BLEStateMessageNotification"
+                                               object:nil];
 
 //    [BLEClass startScan]; // scan and connect to any printers in the area
 
@@ -97,6 +101,9 @@ static int iWidth, iHeight; // size of the image that's ready to print
 }
 - (IBAction)ConnectPushed:(NSButton *)sender {
     NSLog(@"Connect!");
+    if (![BLEClass isConnected]) {
+        _StatusLabel.stringValue = @"スキャン中...";
+    }
     [BLEClass startScan];
 }
 
@@ -206,6 +213,17 @@ static int iWidth, iHeight; // size of the image that's ready to print
         _StatusLabel.stringValue = @"Disconnected";
     }
 } /* statusChanged */
+
+// Bluetooth isn't in a scannable state (off, unauthorized, unsupported) or
+// just finished powering on. Surface it in the status label so pressing
+// Connect isn't silently a no-op with no explanation.
+- (void)bleStateMessage:(NSNotification *) notification
+{
+    NSString *msg = notification.userInfo[@"message"];
+    if (msg) {
+        _StatusLabel.stringValue = msg;
+    }
+} /* bleStateMessage */
 
 - (void)ditherFile:(NSNotification *) notification
 {
