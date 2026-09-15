@@ -37,5 +37,6 @@
 - (IBAction)PreviewTextPushed:(id)sender;
 - (IBAction)DecreaseFontSizePushed:(id)sender;
 - (IBAction)IncreaseFontSizePushed:(id)sender;
+- (void)showAlertWithTitle:(NSString *)title message:(NSString *)message;
 @end
 

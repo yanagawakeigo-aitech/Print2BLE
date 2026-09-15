@@ -176,7 +176,16 @@ static int iWidth, iHeight; // size of the image that's ready to print
 //
 - (void)printImage
 {
-    if (pDithered == NULL) return; // no image to print
+    if (pDithered == NULL) {
+        NSLog(@"printImage: nothing to print yet (drop an image or render some text first)");
+        [self showAlertWithTitle:@"印刷するデータがありません" message:@"画像をドラッグ&ドロップするか、テキストを入力して「プレビュー更新」または「このテキストを印刷」を押してください。"];
+        return; // no image to print
+    }
+    if (![BLEClass isConnected]) {
+        NSLog(@"printImage: not connected to a printer");
+        [self showAlertWithTitle:@"プリンターに接続されていません" message:@"「Connect」ボタンを押し、対応するBLEプリンターの電源とBluetoothがオンになっていることを確認してから、もう一度お試しください。"];
+        return;
+    }
     // Now send it to the printer
     [BLEClass preGraphics:iHeight];
     int iPitch = iWidth/8;
@@ -497,5 +506,15 @@ static int iWidth, iHeight; // size of the image that's ready to print
     [self updateFontSizeLabel];
     if (_textInputView.string.length > 0) [self PreviewTextPushed:sender];
 } /* IncreaseFontSizePushed */
+
+- (void)showAlertWithTitle:(NSString *)title message:(NSString *)message
+{
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.alertStyle = NSAlertStyleWarning;
+    alert.messageText = title;
+    alert.informativeText = message;
+    [alert addButtonWithTitle:@"OK"];
+    [alert runModal];
+} /* showAlertWithTitle:message: */
 
 @end
