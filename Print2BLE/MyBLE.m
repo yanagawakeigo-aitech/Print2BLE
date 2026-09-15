@@ -307,6 +307,19 @@ didDiscoverServices:(NSError *)error
     if (response && supportsResponse) {
         [_myPeripheral writeValue:myData forCharacteristic:_myChar type:CBCharacteristicWriteWithResponse];
     } else {
+        // CoreBluetooth silently drops bytes written with .withoutResponse
+        // once its internal transmit queue is full -- there's no error, the
+        // data is just gone. For a long print job (many scanLine calls in a
+        // tight loop) this reliably loses whatever was in flight when the
+        // queue filled, which shows up as the last few lines missing from
+        // the printout. canSendWriteWithoutResponse is the documented way
+        // to avoid this: wait for room before each such write instead of
+        // relying only on the periodic "ask for a response" throttle below.
+        int waitedMs = 0;
+        while (!_myPeripheral.canSendWriteWithoutResponse && waitedMs < 2000) {
+            usleep(1000); // 1ms
+            waitedMs++;
+        }
         [_myPeripheral writeValue:myData forCharacteristic:_myChar type:CBCharacteristicWriteWithoutResponse];
         if (response) {
             // Must wait for a response but printer characteristic doesn't support it. Let's wait a bit instead.
