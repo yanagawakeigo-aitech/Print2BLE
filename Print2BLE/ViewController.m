@@ -19,7 +19,37 @@ static int iWidth, iHeight; // size of the image that's ready to print
 - (void)viewDidLoad {
     [super viewDidLoad];
     _myview = [DragDropView alloc];
+    [self setupScrollablePreview];
 }
+
+//
+// Wrap the storyboard's fixed-size preview image view in a scroll view so
+// that a preview taller than the visible area (e.g. a long pasted text)
+// can be scrolled instead of running off the bottom of the window.
+//
+- (void)setupScrollablePreview
+{
+    NSView *parent = _myImage.superview;
+    NSRect frame = _myImage.frame;
+    if (parent == nil || [parent isKindOfClass:[NSScrollView class]]) return; // already set up
+
+    NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:frame];
+    scrollView.autoresizingMask = _myImage.autoresizingMask;
+    scrollView.hasVerticalScroller = YES;
+    scrollView.hasHorizontalScroller = NO;
+    scrollView.autohidesScrollers = YES;
+    scrollView.borderType = NSBezelBorder;
+    scrollView.drawsBackground = YES;
+
+    [_myImage removeFromSuperview];
+    _myImage.imageScaling = NSImageScaleAxesIndependently;
+    _myImage.frame = NSMakeRect(0, 0, frame.size.width, frame.size.height);
+    _myImage.autoresizingMask = NSViewWidthSizable;
+
+    scrollView.documentView = _myImage;
+    [parent addSubview:scrollView];
+    _previewScrollView = scrollView;
+} /* setupScrollablePreview */
 
 - (void)viewDidLayout {
     // the outer frame size is known here, so set our drag/drop frame to the same size
@@ -307,6 +337,15 @@ static int iWidth, iHeight; // size of the image that's ready to print
 //            CGContextSetInterpolationQuality(gtx, kCGInterpolationNone);
             NSImage *image = [[NSImage alloc]initWithCGImage:myimage size:NSZeroSize];
             _myImage.image = image; // set it into the image view
+            // Fit the preview to the scroll view's width and let it grow taller
+            // than the visible area (rather than shrinking to fit), so long
+            // previews (e.g. pasted text) can be scrolled instead of clipped.
+            CGFloat previewWidth = _previewScrollView.contentSize.width;
+            if (previewWidth <= 0) previewWidth = iWidth;
+            CGFloat scale = previewWidth / (CGFloat)iWidth;
+            CGFloat previewHeight = iHeight * scale;
+            _myImage.frame = NSMakeRect(0, 0, previewWidth, previewHeight);
+            [_myImage scrollPoint:NSMakePoint(0, previewHeight)]; // scroll to the top of the preview
             // Free temp objects
             CGColorSpaceRelease(colorSpace);
             CGContextRelease(gtx);

@@ -16,6 +16,7 @@
 @property (nonatomic) NSString *filename;
 @property (weak) IBOutlet NSImageView *myImage;
 @property (weak) IBOutlet NSTextField *StatusLabel;
+@property (nonatomic, strong) NSScrollView *previewScrollView;
 
 // Process a new file
 - (void)processFile:(NSString *)path;
@@ -24,5 +25,6 @@
 - (void) printImage;
 - (void)processBitmap:(NSBitmapImageRep *)bitmap;
 - (void)paste:(id)sender;
+- (void)setupScrollablePreview;
 @end
 
