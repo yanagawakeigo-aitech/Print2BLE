@@ -283,7 +283,7 @@ static int iWidth, iHeight; // size of the image that's ready to print
                              NSForegroundColorAttributeName: [NSColor blackColor],
                              NSParagraphStyleAttributeName: paraStyle };
 
-    CGFloat textWidth = printerWidth - (margin * 2);
+    CGFloat textWidth = printerWidth - (margin * 2); // word-wrap constraint
     NSStringDrawingOptions drawOptions = NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading;
     NSRect boundingRect = [text boundingRectWithSize:NSMakeSize(textWidth, CGFLOAT_MAX)
                                               options:drawOptions
@@ -291,11 +291,28 @@ static int iWidth, iHeight; // size of the image that's ready to print
     int textHeight = (int)ceil(boundingRect.size.height + (margin * 2));
     if (textHeight < 1) textHeight = 1;
 
-    NSSize imageSize = NSMakeSize(printerWidth, textHeight);
+    // processBitmap always stretches whichever canvas it's given to fill the
+    // printer's full dot width -- so any blank space baked into this canvas
+    // (to the right of the longest actual line) gets stretched right along
+    // with the text and prints as a visible right margin, however the font
+    // size is set. boundingRect.size.width is the width the widest wrapped
+    // line actually used (<= textWidth, not necessarily equal to it), so
+    // crop the canvas down to exactly that instead of the full textWidth:
+    // once stretched to the printer's width, the longest line then reaches
+    // edge to edge regardless of font size, and no manual size-tuning is
+    // needed to "fill the width".
+    CGFloat contentWidth = ceil(boundingRect.size.width);
+    if (contentWidth < 1) contentWidth = 1;
+    if (contentWidth > textWidth) contentWidth = textWidth; // safety clamp
+
+    NSSize imageSize = NSMakeSize(contentWidth + (margin * 2), textHeight);
     NSImage *image = [[NSImage alloc] initWithSize:imageSize];
     [image lockFocus];
     [[NSColor whiteColor] setFill];
     NSRectFill(NSMakeRect(0, 0, imageSize.width, imageSize.height));
+    // Draw with the ORIGINAL wrap width (textWidth), not the cropped canvas
+    // width, so line breaks land exactly where boundingRect measured them --
+    // every line is guaranteed <= contentWidth wide, so nothing is clipped.
     NSRect drawRect = NSMakeRect(margin, margin, textWidth, boundingRect.size.height);
     [text drawWithRect:drawRect options:drawOptions attributes:attrs];
     [image unlockFocus];
