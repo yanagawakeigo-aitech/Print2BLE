@@ -53,14 +53,20 @@ static int iWidth, iHeight; // size of the image that's ready to print
 } /* setupScrollablePreview */
 
 - (void)viewDidLayout {
+    // viewDidLayout can fire many times (window resize, adding subviews, etc).
+    // Everything below must run exactly once: re-adding the full-window
+    // drag/drop overlay on every pass would push it back in front of the
+    // button/text controls added after it, silently eating their clicks;
+    // re-creating BLEClass and re-registering the notification observers
+    // would also duplicate work and lose connection state.
+    if (_didFinishLayoutSetup) return;
+    _didFinishLayoutSetup = YES;
+
     // the outer frame size is known here, so set our drag/drop frame to the same size
-    
-//    _myview.frame = NSMakeRect(0, 0, self.view.frame.size.width, self.view.frame.size.height);
-    
     [_myview initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, self.view.frame.size.height)];
     // Do any additional setup after loading the view.
     BLEClass = [[MyBLE alloc] init];
-    
+
     _myview.myVC = self; // give DragDropView access to our methods
     [[self view] addSubview:_myview];
 

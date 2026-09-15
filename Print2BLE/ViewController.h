@@ -20,6 +20,7 @@
 @property (nonatomic, strong) NSTextView *textInputView;
 @property (nonatomic, strong) NSTextField *fontSizeLabel;
 @property (nonatomic) CGFloat textFontSize;
+@property (nonatomic) BOOL didFinishLayoutSetup;
 
 // Process a new file
 - (void)processFile:(NSString *)path;
