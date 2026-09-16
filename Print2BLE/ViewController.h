@@ -22,6 +22,7 @@
 @property (nonatomic) BOOL didFinishLayoutSetup;
 @property (nonatomic, strong) NSPopUpButton *devicePopup;
 @property (nonatomic, strong) NSButton *disconnectButton;
+@property (nonatomic, strong) NSPopUpButton *protocolPopup;
 
 // Process a new file
 - (void)processFile:(NSString *)path;
@@ -43,5 +44,7 @@
 - (void)refreshDeviceList:(NSNotification *)notification;
 - (IBAction)DevicePopupChanged:(id)sender;
 - (IBAction)DisconnectPushed:(id)sender;
+- (IBAction)ProtocolPopupChanged:(id)sender;
+- (void)addProtocolItem:(NSPopUpButton *)popup title:(NSString *)title tag:(NSInteger)tag;
 @end
 

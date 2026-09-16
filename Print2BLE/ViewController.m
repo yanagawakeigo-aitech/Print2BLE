@@ -592,7 +592,52 @@ static int iWidth, iHeight; // size of the image that's ready to print
     disconnect.autoresizingMask = NSViewMaxYMargin;
     [parent addSubview:disconnect];
     _disconnectButton = disconnect;
+
+    // Manual protocol override. findPrinter()'s name->protocol table is a
+    // guess for anything not explicitly verified against real hardware
+    // (as PT210 already needed correcting once, from a guessed MTP-2 to
+    // GT01/cat -- the printer sent back garbled ASCII instead of an image,
+    // the classic sign of a protocol/command-set mismatch: the printer
+    // reads raster graphics command bytes as if they were plain text).
+    // This lets the user try every known command set directly, no rebuild
+    // needed, if a given model still isn't recognized correctly.
+    NSTextField *protocolLabel = [NSTextField labelWithString:@"通信方式(印刷がおかしい時に変更):"];
+    protocolLabel.frame = NSMakeRect(32, 362, 220, 18);
+    protocolLabel.autoresizingMask = NSViewMaxYMargin;
+    protocolLabel.font = [NSFont systemFontOfSize:11];
+    protocolLabel.textColor = [NSColor secondaryLabelColor];
+    [parent addSubview:protocolLabel];
+
+    NSPopUpButton *protocolPopup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(256, 358, 204, 26) pullsDown:NO];
+    [self addProtocolItem:protocolPopup title:@"MTP-2/MTP-3系" tag:PRINTER_MTP2];
+    [self addProtocolItem:protocolPopup title:@"GT01/GB01系(cat)" tag:PRINTER_CAT];
+    [self addProtocolItem:protocolPopup title:@"PeriPage+" tag:PRINTER_PERIPAGEPLUS];
+    [self addProtocolItem:protocolPopup title:@"PeriPage" tag:PRINTER_PERIPAGE];
+    [self addProtocolItem:protocolPopup title:@"Panda/D110系" tag:PRINTER_PANDA];
+    protocolPopup.target = self;
+    protocolPopup.action = @selector(ProtocolPopupChanged:);
+    protocolPopup.autoresizingMask = NSViewMaxYMargin;
+    protocolPopup.toolTip = @"通信がうまくいかない場合、ここで通信方式を変えて印刷を試せます";
+    [parent addSubview:protocolPopup];
+    _protocolPopup = protocolPopup;
 } /* setupDevicePicker */
+
+- (void)addProtocolItem:(NSPopUpButton *)popup title:(NSString *)title tag:(NSInteger)tag
+{
+    [popup addItemWithTitle:title];
+    [popup lastItem].tag = tag;
+} /* addProtocolItem:title:tag: */
+
+// Force the active printer protocol/command-set, overriding whatever
+// findPrinter() guessed from the device name. Takes effect on the next
+// print (preGraphics/scanLine branch on BLEClass.ucPrinterType).
+- (IBAction)ProtocolPopupChanged:(id)sender
+{
+    NSInteger tag = _protocolPopup.selectedTag;
+    NSLog(@"Manually overriding printer protocol to tag %ld", (long)tag);
+    BLEClass.ucPrinterType = (uint8_t)tag;
+    [self showAlertWithTitle:@"プロトコルを変更しました" message:@"もう一度印刷を試してください。正しく印刷できたら、その機種名も教えてください。"];
+} /* ProtocolPopupChanged */
 
 // Rebuild the popup's contents whenever MyBLE finds a new device or clears
 // its list (start of a fresh scan).
