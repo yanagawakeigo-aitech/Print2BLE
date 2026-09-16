@@ -20,6 +20,7 @@
 @property (nonatomic, strong) NSTextField *fontSizeLabel;
 @property (nonatomic) CGFloat textFontSize;
 @property (nonatomic) BOOL didFinishLayoutSetup;
+@property (nonatomic) BOOL isPrinting;
 @property (nonatomic, strong) NSPopUpButton *devicePopup;
 @property (nonatomic, strong) NSButton *disconnectButton;
 @property (nonatomic, strong) NSPopUpButton *protocolPopup;

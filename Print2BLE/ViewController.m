@@ -205,15 +205,39 @@ static int iWidth, iHeight; // size of the image that's ready to print
         [self showAlertWithTitle:@"プリンターに接続されていません" message:@"「Connect」ボタンを押し、対応するBLEプリンターの電源とBluetoothがオンになっていることを確認してから、もう一度お試しください。"];
         return;
     }
-    // Now send it to the printer
-    [BLEClass preGraphics:iHeight];
-    int iPitch = iWidth/8;
-    uint8_t *pSrc = pDithered;
-    for (int y=0; y<iHeight; y++) {
-        [BLEClass scanLine:pSrc withLength:iPitch];
-        pSrc += iPitch;
+    if (_isPrinting) {
+        NSLog(@"printImage: a print job is already in progress");
+        return; // ignore re-entrant taps; also avoids racing a new
+                // processBitmap: call freeing pDithered out from under
+                // the in-flight background block below
     }
-    [BLEClass postGraphics];
+    _isPrinting = YES;
+    // Send it to the printer on a background queue. writeData: (called once
+    // per scanline) can block waiting for CBPeripheral.canSendWriteWithoutResponse
+    // to avoid CoreBluetooth silently dropping bytes on a long job -- but
+    // this loop runs synchronously off a button's action, i.e. on the MAIN
+    // thread/run loop. If the printer is slow, unreachable, or stuck (as
+    // happened after a protocol mismatch produced garbled output), that
+    // wait freezes the entire app -- confirmed via a macOS hang report
+    // whose stack trace was exactly this loop blocked in usleep, which is
+    // why Connect (and everything else) looked completely dead afterward
+    // with zero visual reaction. Printing is the only thing that should
+    // wait here, not the whole UI.
+    int captureWidth = iWidth, captureHeight = iHeight;
+    uint8_t *captureData = pDithered;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [BLEClass preGraphics:captureHeight];
+        int iPitch = captureWidth/8;
+        uint8_t *pSrc = captureData;
+        for (int y=0; y<captureHeight; y++) {
+            [BLEClass scanLine:pSrc withLength:iPitch];
+            pSrc += iPitch;
+        }
+        [BLEClass postGraphics];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self->_isPrinting = NO;
+        });
+    });
 
 } /* printImage */
 
