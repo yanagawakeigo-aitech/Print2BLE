@@ -12,7 +12,6 @@
 
 @interface ViewController : NSViewController
 
-@property (nonatomic, retain) DragDropView *myview;
 @property (nonatomic) NSString *filename;
 @property (weak) IBOutlet NSImageView *myImage;
 @property (weak) IBOutlet NSTextField *StatusLabel;

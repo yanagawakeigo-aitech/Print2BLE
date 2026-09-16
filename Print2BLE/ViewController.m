@@ -18,7 +18,6 @@ static int iWidth, iHeight; // size of the image that's ready to print
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    _myview = [DragDropView alloc];
     _textFontSize = 24.0;
     [self setupScrollablePreview];
 }
@@ -62,26 +61,24 @@ static int iWidth, iHeight; // size of the image that's ready to print
     if (_didFinishLayoutSetup) return;
     _didFinishLayoutSetup = YES;
 
-    // the outer frame size is known here, so set our drag/drop frame to the same size
-    [_myview initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, self.view.frame.size.height)];
-    // Do any additional setup after loading the view.
+    // Drag-and-drop used to be handled by a SEPARATE DragDropView created
+    // at runtime and layered on top of the entire window (because a
+    // storyboard-placed view is loaded via -initWithCoder:, which never
+    // calls the -initWithFrame: override where registerForDraggedTypes:
+    // used to live). That overlay had to out-front every button to catch
+    // drops, and verified in this session with an actual synthetic mouse
+    // click (not an accessibility-API press, which bypasses normal
+    // hit-testing and had been masking this): it silently swallowed real
+    // clicks meant for Connect/Print/Feed regardless of z-order tricks.
+    // DragDropView now also registers for dragging from -awakeFromNib, so
+    // the storyboard's own root view (self.view, customClass DragDropView)
+    // can be the drag destination directly -- no extra covering view
+    // needed at all, so there's nothing left to steal a button's click.
+    ((DragDropView *)self.view).myVC = self;
+
     BLEClass = [[MyBLE alloc] init];
 
-    _myview.myVC = self; // give DragDropView access to our methods
-    // Send the full-window drag/drop overlay to the BACK of the z-order
-    // instead of appending it (which would put it in FRONT of the
-    // storyboard's own Connect/Print/Feed buttons -- they're already in
-    // the view hierarchy by this point, loaded before viewDidLayout ever
-    // runs). A plain addSubview: here silently ate real mouse clicks on
-    // those buttons even though AX-driven presses (which bypass normal
-    // hit-testing) still worked, which is why this wasn't caught earlier.
-    // positioned:NSWindowBelow keeps every button -- existing and any
-    // added later -- clickable while the overlay still catches drags
-    // anywhere no other control sits.
-    [[self view] addSubview:_myview positioned:NSWindowBelow relativeTo:nil];
-
-    // Add the text-entry panel AFTER the full-window drag/drop overlay so
-    // its controls sit in front of it and remain clickable/typeable.
+    // Add the text-entry panel and device picker now that BLEClass exists.
     [self setupTextEntryPanel];
     [self setupDevicePicker];
 

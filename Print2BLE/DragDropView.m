@@ -20,6 +20,18 @@
     return self;
 }
 
+// Storyboard/nib-loaded views are created via -initWithCoder:, which never
+// calls -initWithFrame:, so a DragDropView placed in Interface Builder
+// would silently never register for dragging without this. (This used to
+// be worked around by layering a second, runtime-created DragDropView
+// covering the whole window on top of everything -- which then had to
+// fight for z-order against every button placed in the storyboard and
+// ended up silently swallowing real mouse clicks meant for them.)
+- (void)awakeFromNib {
+    [super awakeFromNib];
+    [self registerForDraggedTypes:[NSArray arrayWithObject:NSPasteboardTypeFileURL]];
+}
+
 - (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender{
     [self setNeedsDisplay: YES];
     return NSDragOperationGeneric;
@@ -37,7 +49,15 @@
 - (BOOL)performDragOperation:(id <NSDraggingInfo>)sender
 {
     NSPasteboard *pboard = [sender draggingPasteboard];
-    
+
+    // For the storyboard-loaded root view, myVC isn't wired via an IBOutlet
+    // (there's no outlet slot for it in the .storyboard); resolve it from
+    // the window lazily instead, once the window/view-controller hierarchy
+    // is guaranteed to exist.
+    if (_myVC == nil && [self.window.contentViewController isKindOfClass:[ViewController class]]) {
+        _myVC = (ViewController *)self.window.contentViewController;
+    }
+
     if ( [[pboard types] containsObject:NSPasteboardTypeFileURL] ) {
         NSArray<Class> *classes = @[[NSURL class]];
         NSDictionary *options = @{};
